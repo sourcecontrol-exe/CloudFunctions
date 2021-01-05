@@ -1,0 +1,120 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isClanMember(UserId){
+      return get(/databases/$(database)/documents/PublicUserData/$(UserId)).data.ClanData.ClanId;
+    }
+
+	function ClanLeaderRank(UserId){
+      return get(/databases/$(database)/documents/PublicUserData/$(UserId)).data.ClanData.ClanRank;
+  }
+  
+  function GetTourneyId(UserId){
+    return get(/databases/$(database)/documents/PublicUserData/$(UserId)).data.TourneyData.CurrentTourneyId;
+  }
+    
+  function GetTourneyStatus(TourneyId){
+      return get(/database/$(database)/documents/TourneyInfo/$(TourneyId)).data.Status;
+  }
+
+  function GetTeamChestStatus(EventId){
+      return get(/database/$(database)/documents/TeamChestInfo/$(EventId)).data.Status;
+  }
+    
+    
+    match /PrivateUserData/{UserId}{
+    	allow create, read, update: 
+      	if request.auth.uid == UserId && request.auth.uid == request.resource.data.UserId;
+    }
+    
+   match /PublicUserData/{UserId} {
+      allow read: if request.auth.uid != null;
+      allow create, update: 
+          if request.auth.uid == UserId && request.auth.uid == request.resource.data.UserId;
+    }
+    
+    match /NotifyMessages/{UserId} {
+      allow read: if request.auth.uid != null;
+      allow update: 
+          if request.auth.uid == UserId && request.auth.uid == request.resource.data.UserId;
+      allow create: if request.resource.data.Type==1 && request.auth.uid !=null;
+      allow delete: if request.auth.uid == resource.data.UserId;
+    }
+    
+    match /TourneyInfo/{documentId} {
+        allow read: if request.auth != null;
+    } 
+
+   //TODO set and reset status of active tournaments
+		match /TourneyScore/{documentId} {
+    	allow read: if request.auth.uid != null 
+      		&& resource.data.TourneyId == GetTourneyId(request.auth.uid);                  
+      allow create, update: if request.auth.uid == request.resource.data.UserId
+      							&& GetTourneyId(request.auth.uid) == request.resource.data.TourneyId
+                    && GetTourneyStatus(GetTourneyId(request.auth.uid))== "Testing";
+    }
+
+		match /TeamChestInfo/{documentId} {
+      	allow read: if isClanMember(request.auth.uid) != "";
+  	}
+    
+  //TODO set and reset status of active TeamChest
+    match /TeamChestScore/{documentId} {
+      allow read: if isClanMember(request.auth.uid) != "";      
+      allow create, update:
+      			if GetTeamChestStatus(request.resource.data.TourneyId) == "Active"
+      			&& request.auth.uid == request.resource.data.UserId
+      			&& isClanMember(request.auth.uid) == request.resource.data.ClanId
+  }
+    
+    match /ClanBots/{documentId}{
+      allow read, write: if false;
+    }
+    
+     match /ClanDonations/{documentId} {
+    	allow read: if request.auth != null;
+      allow create: if request.auth.uid == request.resource.data.UserId;
+      allow update: if (request.auth.uid == resource.data.UserId || 
+      							request.auth.uid == resource.data.DonatedToUserId);
+    }
+    
+    
+    // TODO: Only clan leader can update requests type chats.. anyone can create but not update
+    match /ClanChats/{documentId}{
+    	allow read: if resource.data.ClanId == isClanMember(request.auth.uid) || request.resource.data.ClanId == "";
+    	allow create: if request.auth.uid == request.resource.data.UserId 
+      							&& (request.resource.data.Type == 6 || 
+      									request.resource.data.Type == 5 || request.resource.data.Type == 2 ||
+                    		request.resource.data.ClanId == isClanMember(request.auth.uid));
+      allow update: if request.auth.uid == request.resource.data.UserId ||
+      							(ClanLeaderRank(request.auth.uid) == 3 && request.resource.data.Type == 5) ||
+                    (isClanMember(request.auth.uid)==resource.data.ClanId && 
+                    request.resource.data.Type == 1);  
+      allow delete: if (request.auth.uid == resource.data.UserId && isClanMember(request.auth.uid)==resource.data.ClanId)
+      							|| (ClanLeaderRank(request.auth.uid) == 3 &&
+      							isClanMember(request.auth.uid)==resource.data.ClanId);
+
+    }
+    
+
+    
+    //TODO set rules on fields of clans based on role
+    match /Clans/{documentId}{
+     	allow create: if isClanMember(request.auth.uid) == "" && request.auth.uid != null 
+                    
+      allow read: 	if request.auth.uid != null;
+      
+      allow update: if (resource.data.Type==0 && ClanLeaderRank(request.auth.uid) == 3 || 
+      							resource.data.ClanId == isClanMember(request.auth.uid) || request.auth != null) || 
+                    (resource.data.Type==1 && ClanLeaderRank(request.auth.uid) == 3);
+                    
+     
+    }
+    
+
+    
+
+
+  }
+}

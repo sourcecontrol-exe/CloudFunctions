@@ -1,0 +1,10 @@
+{
+    "params": {
+        "clanId": "testNewClan"
+    },
+    "after": {
+        "Name": "Hello D Clan"
+    }
+}
+
+// ClanOnWrite(require('./ClanOnWrite/test-NewClan.json'));
